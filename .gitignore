@@ -1,0 +1,14 @@
+.DS_Store
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+data/
+.ai/
+*.db
+*.index
+*.onnx
+.env
+venv/
+.venv/
