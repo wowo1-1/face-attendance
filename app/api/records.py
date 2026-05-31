@@ -18,7 +18,9 @@ async def get_records(
     day: date | None = Query(None, alias="date"),
     session: Session = Depends(get_session),
 ):
-    stmt = select(Attendance)
+    stmt = select(Attendance, Student.name, Student.student_id).join(
+        Student, Attendance.student_id == Student.id
+    )
     if course_id is not None:
         stmt = stmt.where(Attendance.course_id == course_id)
     if student_id is not None:
@@ -27,8 +29,17 @@ async def get_records(
         start = datetime.combine(day, datetime.min.time())
         end = start + timedelta(days=1)
         stmt = stmt.where(Attendance.timestamp >= start, Attendance.timestamp < end)
-    records = session.exec(stmt).all()
-    return [r.model_dump() for r in records]
+    rows = session.exec(stmt).all()
+    result = []
+    for record, name, stu_no in rows:
+        d = record.model_dump()
+        d["name"] = name
+        d["student_number"] = stu_no
+        # 状态转中文
+        status_map = {"present": "已签到", "absent": "缺勤", "late": "迟到"}
+        d["status_cn"] = status_map.get(d.get("status", ""), d.get("status", ""))
+        result.append(d)
+    return result
 
 
 @router.get("/students")

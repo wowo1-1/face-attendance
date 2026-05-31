@@ -169,11 +169,10 @@ def register_page():
     st.header("学生注册")
     name = st.text_input("姓名")
     student_id = st.text_input("学号")
-    photo_camera = st.camera_input("拍照", key="register_camera")
     photo_upload = st.file_uploader(
-        "或上传照片", type=["jpg", "png", "jpeg"], key="register_upload"
+        "上传照片", type=["jpg", "png", "jpeg"], key="register_upload"
     )
-    photo = photo_camera or photo_upload
+    photo = photo_upload
 
     if st.button("注册"):
         name_clean = name.strip()
@@ -222,11 +221,10 @@ def attend_page():
     """考勤签到页面"""
     st.header("考勤签到")
     course_id = st.number_input("课程 ID", min_value=1, step=1)
-    photo_camera = st.camera_input("拍照", key="attend_camera")
     photo_upload = st.file_uploader(
-        "或上传照片", type=["jpg", "png", "jpeg"], key="attend_upload"
+        "上传照片", type=["jpg", "png", "jpeg"], key="attend_upload"
     )
-    photo = photo_camera or photo_upload
+    photo = photo_upload
 
     if st.button("签到"):
         if not photo:
@@ -304,35 +302,30 @@ def attend_page():
 
 def records_page():
     """考勤记录查询页面"""
-    st.header("考勤记录")
+    st.header("考勤记录查询")
     col1, col2, col3 = st.columns(3)
-    course_id_raw = col1.text_input("课程 ID（可选）", key="records_course_id")
-    student_id_raw = col2.text_input("学生数据库 ID（可选）", key="records_student_id")
-    use_date = col3.checkbox("按日期过滤", value=False, key="records_use_date")
+    course_id_raw = col1.text_input("课程编号（可选）", key="records_course_id")
+    student_id_raw = col2.text_input("学生学号（可选）", key="records_student_id")
+    use_date = col3.checkbox("按日期筛选", value=False, key="records_use_date")
     selected_date = None
     if use_date:
-        # Streamlit 不支持 `date_input(value=None)`；用开关实现“可选日期”
         selected_date = col3.date_input(
-            "日期",
+            "选择日期",
             value=Date.today(),
             max_value=Date.today(),
             key="records_date",
         )
 
-    if st.button("查询"):
+    if st.button("查询考勤记录"):
         params: dict[str, Any] = {}
         if course_id_raw.strip():
             try:
                 params["course_id"] = int(course_id_raw.strip())
             except ValueError:
-                st.error("课程 ID 必须是整数")
+                st.error("课程编号必须是整数")
                 return
         if student_id_raw.strip():
-            try:
-                params["student_id"] = int(student_id_raw.strip())
-            except ValueError:
-                st.error("学生数据库 ID 必须是整数")
-                return
+            params["student_id"] = student_id_raw.strip()
         if selected_date:
             params["date"] = selected_date.isoformat()
         try:
@@ -343,25 +336,40 @@ def records_page():
                     timeout=min(_requests_timeout(), 60.0),
                 )
             if resp.ok:
-                payload = _try_parse_json(resp)
-                if payload is None:
-                    st.warning("查询成功，但后端返回非 JSON")
+                records = _try_parse_json(resp)
+                if records is None:
+                    st.warning("查询成功，但后端返回非 JSON 格式")
                     with st.expander("返回内容（Text）"):
                         st.code((resp.text or "").strip(), language="text")
-                elif payload:
-                    st.dataframe(payload, use_container_width=True)
+                elif records:
+                    # 整理显示字段（全中文）
+                    display = []
+                    for r in records:
+                        display.append({
+                            "编号": r.get("id", ""),
+                            "学生姓名": r.get("name", ""),
+                            "学号": r.get("student_number", ""),
+                            "课程编号": r.get("course_id", ""),
+                            "签到时间": r.get("timestamp", ""),
+                            "状态": r.get("status_cn", r.get("status", "")),
+                            "置信度": f"{r.get('confidence', 0):.2%}" if isinstance(r.get("confidence"), (int, float)) and 0 <= r["confidence"] <= 1 else str(r.get("confidence", "")),
+                        })
+                    st.dataframe(display, use_container_width=True, hide_index=True)
+                    st.caption(f"共 {len(display)} 条记录")
                 else:
-                    st.info("暂无记录")
+                    st.info("暂无考勤记录")
             else:
                 _show_http_error("查询", resp)
         except requests.Timeout:
-            st.error("查询请求超时：请检查后端是否卡住，或在侧边栏增大超时时间。")
+            st.error("查询请求超时：请检查后端是否正在运行，或在侧边栏增大超时时间。")
         except requests.ConnectionError as e:
-            _show_request_exception("查询", e)
+            st.error(f"无法连接到后端：{e}")
+            st.caption(f"当前后端地址：`{api_base or '(空)'}`")
         except ValueError as e:
             st.error(f"查询失败：{e}")
         except requests.RequestException as e:
-            _show_request_exception("查询", e)
+            st.error(f"查询请求失败：{e}")
+            st.caption(f"当前后端地址：`{api_base or '(空)'}`")
 
 
 # 路由到对应页面
