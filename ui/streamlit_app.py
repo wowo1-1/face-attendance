@@ -196,7 +196,7 @@ def register_page():
 
         captured = st.session_state.get("register_captured")
         if captured:
-            st.image(captured, caption="已拍摄", use_container_width=True)
+            st.image(captured, caption="已拍摄", use_column_width=True)
             if st.button("❌ 重拍", key="register_recapture"):
                 del st.session_state["register_captured"]
                 st.rerun()
@@ -289,7 +289,7 @@ def attend_page():
 
         captured = st.session_state.get("attend_captured")
         if captured:
-            st.image(captured, caption="已拍摄", use_container_width=True)
+            st.image(captured, caption="已拍摄", use_column_width=True)
             if st.button("❌ 重拍", key="attend_recapture"):
                 del st.session_state["attend_captured"]
                 st.rerun()
