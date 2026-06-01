@@ -70,7 +70,7 @@ with st.sidebar:
         step=1,
     )
     st.divider()
-    page = st.radio("功能导航", ["学生注册", "考勤签到", "考勤记录"])
+    page = st.radio("功能导航", ["学生注册", "考勤签到", "考勤记录", "学生管理"])
 
 
 def _make_file_payload(photo: Any) -> tuple[str, bytes, str]:
@@ -301,7 +301,7 @@ def attend_page():
 
 
 def records_page():
-    """考勤记录查询页面"""
+    """考勤记录查询页面（带删除功能）"""
     st.header("考勤记录查询")
     col1, col2, col3 = st.columns(3)
     course_id_raw = col1.text_input("课程编号（可选）", key="records_course_id")
@@ -316,61 +316,153 @@ def records_page():
             key="records_date",
         )
 
-    if st.button("查询考勤记录"):
-        params: dict[str, Any] = {}
-        if course_id_raw.strip():
+    if "records_data" not in st.session_state:
+        st.session_state.records_data = None
+
+    if st.button("查询考勤记录") or st.session_state.records_data is not None:
+        if st.session_state.records_data is None:
+            params: dict[str, Any] = {}
+            if course_id_raw.strip():
+                try:
+                    params["course_id"] = int(course_id_raw.strip())
+                except ValueError:
+                    st.error("课程编号必须是整数")
+                    return
+            if student_id_raw.strip():
+                params["student_id"] = student_id_raw.strip()
+            if selected_date:
+                params["date"] = selected_date.isoformat()
             try:
-                params["course_id"] = int(course_id_raw.strip())
-            except ValueError:
-                st.error("课程编号必须是整数")
-                return
-        if student_id_raw.strip():
-            params["student_id"] = student_id_raw.strip()
-        if selected_date:
-            params["date"] = selected_date.isoformat()
-        try:
-            with st.spinner("正在查询..."):
-                resp = requests.get(
-                    _api_url("/api/records"),
-                    params=params,
-                    timeout=min(_requests_timeout(), 60.0),
-                )
-            if resp.ok:
-                records = _try_parse_json(resp)
-                if records is None:
-                    st.warning("查询成功，但后端返回非 JSON 格式")
-                    with st.expander("返回内容（Text）"):
-                        st.code((resp.text or "").strip(), language="text")
-                elif records:
-                    # 整理显示字段（全中文）
-                    display = []
-                    for r in records:
-                        display.append({
-                            "编号": r.get("id", ""),
-                            "学生姓名": r.get("name", ""),
-                            "学号": r.get("student_number", ""),
-                            "课程编号": r.get("course_id", ""),
-                            "签到时间": r.get("timestamp", ""),
-                            "状态": r.get("status_cn", r.get("status", "")),
-                            "置信度": f"{r.get('confidence', 0):.2%}" if isinstance(r.get("confidence"), (int, float)) and 0 <= r["confidence"] <= 1 else str(r.get("confidence", "")),
-                        })
-                    st.dataframe(display, use_container_width=True, hide_index=True)
-                    st.caption(f"共 {len(display)} 条记录")
+                with st.spinner("正在查询..."):
+                    resp = requests.get(
+                        _api_url("/api/records"),
+                        params=params,
+                        timeout=min(_requests_timeout(), 60.0),
+                    )
+                if resp.ok:
+                    st.session_state.records_data = _try_parse_json(resp)
                 else:
-                    st.info("暂无考勤记录")
+                    _show_http_error("查询", resp)
+                    return
+            except requests.Timeout:
+                st.error("查询请求超时：请检查后端是否正在运行，或在侧边栏增大超时时间。")
+                return
+            except requests.ConnectionError as e:
+                st.error(f"无法连接到后端：{e}")
+                st.caption(f"当前后端地址：`{api_base or '(空)'}`")
+                return
+            except requests.RequestException as e:
+                st.error(f"查询请求失败：{e}")
+                return
+
+        records = st.session_state.records_data
+        if records is None:
+            st.warning("查询成功，但后端返回非 JSON 格式")
+        elif records:
+            # 整理显示字段
+            display = []
+            for r in records:
+                display.append({
+                    "编号": r.get("id", ""),
+                    "学生姓名": r.get("name", ""),
+                    "学号": r.get("student_number", ""),
+                    "课程编号": r.get("course_id", ""),
+                    "签到时间": r.get("timestamp", ""),
+                    "状态": r.get("status_cn", r.get("status", "")),
+                    "置信度": f"{r.get('confidence', 0):.2%}" if isinstance(r.get("confidence"), (int, float)) and 0 <= r["confidence"] <= 1 else str(r.get("confidence", "")),
+                })
+            st.dataframe(display, use_container_width=True, hide_index=True)
+            st.caption(f"共 {len(display)} 条记录")
+            st.divider()
+
+            # 删除记录区域
+            st.subheader("删除考勤记录")
+            delete_id = st.number_input(
+                "输入要删除的记录编号", min_value=1, step=1, key="delete_record_id"
+            )
+            if st.button("删除该记录", type="secondary"):
+                try:
+                    resp = requests.delete(
+                        _api_url(f"/api/records/{delete_id}"),
+                        timeout=_requests_timeout(),
+                    )
+                    if resp.ok:
+                        st.success(f"记录 {delete_id} 已删除")
+                        st.session_state.records_data = None  # 刷新数据
+                        st.rerun()
+                    else:
+                        _show_http_error("删除", resp)
+                except requests.RequestException as e:
+                    st.error(f"删除失败：{e}")
+        else:
+            st.info("暂无考勤记录")
+            if st.button("清空查询"):
+                st.session_state.records_data = None
+                st.rerun()
+
+
+def students_page():
+    """学生管理页面（查看和删除学生）"""
+    st.header("学生管理")
+
+    if st.button("刷新学生列表"):
+        st.rerun()
+
+    try:
+        with st.spinner("正在加载..."):
+            resp = requests.get(
+                _api_url("/api/students"),
+                timeout=_requests_timeout(),
+            )
+        if resp.ok:
+            students = _try_parse_json(resp)
+            if students:
+                display = []
+                for s in students:
+                    display.append({
+                        "编号": s.get("id", ""),
+                        "姓名": s.get("name", ""),
+                        "学号": s.get("student_id", ""),
+                        "注册时间": s.get("created_at", ""),
+                    })
+                st.dataframe(display, use_container_width=True, hide_index=True)
+                st.caption(f"共 {len(display)} 名学生")
+
+                st.divider()
+                st.subheader("删除学生（离校处理）")
+                st.warning("⚠️ 删除学生将同时清除其人脸数据和所有考勤记录，不可恢复！")
+                delete_student_id = st.number_input(
+                    "输入要删除的学生编号", min_value=1, step=1, key="delete_student_id"
+                )
+                confirm = st.checkbox("确认删除", key="confirm_delete_student")
+                if st.button("删除该学生", type="secondary", disabled=not confirm):
+                    try:
+                        resp = requests.delete(
+                            _api_url(f"/api/students/{delete_student_id}"),
+                            timeout=_requests_timeout(),
+                        )
+                        if resp.ok:
+                            data = _try_parse_json(resp)
+                            name = data.get("name", "") if data else ""
+                            st.success(f"学生 {name}（编号 {delete_student_id}）已删除")
+                            st.rerun()
+                        else:
+                            _show_http_error("删除", resp)
+                    except requests.RequestException as e:
+                        st.error(f"删除失败：{e}")
             else:
-                _show_http_error("查询", resp)
-        except requests.Timeout:
-            st.error("查询请求超时：请检查后端是否正在运行，或在侧边栏增大超时时间。")
-        except requests.ConnectionError as e:
-            st.error(f"无法连接到后端：{e}")
-            st.caption(f"当前后端地址：`{api_base or '(空)'}`")
-        except ValueError as e:
-            st.error(f"查询失败：{e}")
-        except requests.RequestException as e:
-            st.error(f"查询请求失败：{e}")
-            st.caption(f"当前后端地址：`{api_base or '(空)'}`")
+                st.info("暂无学生数据")
+        else:
+            _show_http_error("查询", resp)
+    except requests.RequestException as e:
+        st.error(f"请求失败：{e}")
 
 
-# 路由到对应页面
-{"学生注册": register_page, "考勤签到": attend_page, "考勤记录": records_page}[page]()
+# 页面路由
+page_map = {
+    "学生注册": register_page,
+    "考勤签到": attend_page,
+    "考勤记录": records_page,
+    "学生管理": students_page,
+}
+page_map[page]()
