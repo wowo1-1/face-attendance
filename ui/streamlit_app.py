@@ -165,14 +165,19 @@ def _extract_attend_fields(result: Any) -> dict[str, Any]:
 
 
 def register_page():
-    """学生注册页面"""
+    """学生注册页面（支持上传照片或摄像头拍照）"""
     st.header("学生注册")
     name = st.text_input("姓名")
     student_id = st.text_input("学号")
-    photo_upload = st.file_uploader(
-        "上传照片", type=["jpg", "png", "jpeg"], key="register_upload"
-    )
-    photo = photo_upload
+
+    input_method = st.radio("选择照片方式", ["上传照片", "摄像头拍照"], horizontal=True)
+    photo = None
+    if input_method == "上传照片":
+        photo = st.file_uploader(
+            "选择照片", type=["jpg", "png", "jpeg"], key="register_upload"
+        )
+    else:
+        photo = st.camera_input("拍照", key="register_camera")
 
     if st.button("注册"):
         name_clean = name.strip()
@@ -218,13 +223,17 @@ def register_page():
 
 
 def attend_page():
-    """考勤签到页面"""
+    """考勤签到页面（支持上传照片或摄像头拍照）"""
     st.header("考勤签到")
     course_id = st.number_input("课程 ID", min_value=1, step=1)
-    photo_upload = st.file_uploader(
-        "上传照片", type=["jpg", "png", "jpeg"], key="attend_upload"
-    )
-    photo = photo_upload
+    input_method = st.radio("选择照片方式", ["上传照片", "摄像头拍照"], horizontal=True, key="attend_input_method")
+    photo = None
+    if input_method == "上传照片":
+        photo = st.file_uploader(
+            "选择照片", type=["jpg", "png", "jpeg"], key="attend_upload"
+        )
+    else:
+        photo = st.camera_input("拍照", key="attend_camera")
 
     if st.button("签到"):
         if not photo:
