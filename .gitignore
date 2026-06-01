@@ -12,3 +12,4 @@ data/
 .env
 venv/
 .venv/
+capture_test.jpg
