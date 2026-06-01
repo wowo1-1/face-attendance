@@ -178,10 +178,40 @@ def register_page():
         )
     with col2:
         st.markdown("**摄像头拍照**")
-        camera_photo = st.camera_input("拍照", key="register_camera", label_visibility="collapsed")
+        if st.button("📸 拍照", key="register_capture_btn", use_container_width=True):
+            try:
+                with st.spinner("正在调用摄像头..."):
+                    resp = requests.post(
+                        _api_url("/api/capture"), timeout=_requests_timeout()
+                    )
+                if resp.ok:
+                    st.session_state["register_captured"] = resp.content
+                    st.rerun()
+                else:
+                    st.error(f"拍照失败: HTTP {resp.status_code}")
+            except requests.ConnectionError:
+                st.error("无法连接后端，请确认后端已启动")
+            except Exception as e:
+                st.error(f"拍照失败: {e}")
+
+        captured = st.session_state.get("register_captured")
+        if captured:
+            st.image(captured, caption="已拍摄", use_container_width=True)
+            if st.button("❌ 重拍", key="register_recapture"):
+                del st.session_state["register_captured"]
+                st.rerun()
 
     # 优先用上传的照片，没有则用摄像头拍的
-    photo = upload_photo or camera_photo
+    photo = upload_photo
+    if not photo and st.session_state.get("register_captured"):
+        class _CaptureFile:
+            name = "camera.jpg"
+            type = "image/jpeg"
+            def __init__(self, data):
+                self._data = data
+            def getvalue(self):
+                return self._data
+        photo = _CaptureFile(st.session_state["register_captured"])
 
     if st.button("注册"):
         name_clean = name.strip()
@@ -212,6 +242,8 @@ def register_page():
                         st.code((resp.text or "").strip(), language="text")
                 else:
                     st.success("注册成功")
+                    if "register_captured" in st.session_state:
+                        del st.session_state["register_captured"]
                     with st.expander("返回内容（JSON）"):
                         st.code(_format_payload(payload), language="json")
             else:
@@ -239,9 +271,39 @@ def attend_page():
         )
     with col2:
         st.markdown("**摄像头拍照**")
-        camera_photo = st.camera_input("拍照", key="attend_camera", label_visibility="collapsed")
+        if st.button("📸 拍照", key="attend_capture_btn", use_container_width=True):
+            try:
+                with st.spinner("正在调用摄像头..."):
+                    resp = requests.post(
+                        _api_url("/api/capture"), timeout=_requests_timeout()
+                    )
+                if resp.ok:
+                    st.session_state["attend_captured"] = resp.content
+                    st.rerun()
+                else:
+                    st.error(f"拍照失败: HTTP {resp.status_code}")
+            except requests.ConnectionError:
+                st.error("无法连接后端，请确认后端已启动")
+            except Exception as e:
+                st.error(f"拍照失败: {e}")
 
-    photo = upload_photo or camera_photo
+        captured = st.session_state.get("attend_captured")
+        if captured:
+            st.image(captured, caption="已拍摄", use_container_width=True)
+            if st.button("❌ 重拍", key="attend_recapture"):
+                del st.session_state["attend_captured"]
+                st.rerun()
+
+    photo = upload_photo
+    if not photo and st.session_state.get("attend_captured"):
+        class _CaptureFile:
+            name = "camera.jpg"
+            type = "image/jpeg"
+            def __init__(self, data):
+                self._data = data
+            def getvalue(self):
+                return self._data
+        photo = _CaptureFile(st.session_state["attend_captured"])
 
     if st.button("签到"):
         if not photo:

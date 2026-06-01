@@ -3,6 +3,7 @@
 import cv2
 import numpy as np
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import Response
 from sqlmodel import Session
 from sqlmodel import select
 
@@ -10,6 +11,22 @@ from app.models.database import get_session
 from app.models.schema import Student
 
 router = APIRouter(prefix="/api")
+
+
+@router.post("/capture")
+async def capture_photo():
+    """从本地摄像头拍摄一张照片（不依赖浏览器 API）"""
+    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    if not cap.isOpened():
+        cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        raise HTTPException(500, "无法打开摄像头，请检查摄像头是否已连接")
+    ret, frame = cap.read()
+    cap.release()
+    if not ret:
+        raise HTTPException(500, "拍照失败，请重试")
+    _, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
+    return Response(content=buffer.tobytes(), media_type="image/jpeg")
 
 
 @router.post("/register")
