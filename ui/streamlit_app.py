@@ -170,14 +170,18 @@ def register_page():
     name = st.text_input("姓名")
     student_id = st.text_input("学号")
 
-    input_method = st.radio("选择照片方式", ["上传照片", "摄像头拍照"], horizontal=True)
-    photo = None
-    if input_method == "上传照片":
-        photo = st.file_uploader(
-            "选择照片", type=["jpg", "png", "jpeg"], key="register_upload"
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("**上传照片**")
+        upload_photo = st.file_uploader(
+            "选择照片", type=["jpg", "png", "jpeg"], key="register_upload", label_visibility="collapsed"
         )
-    else:
-        photo = st.camera_input("拍照", key="register_camera")
+    with col2:
+        st.markdown("**摄像头拍照**")
+        camera_photo = st.camera_input("拍照", key="register_camera", label_visibility="collapsed")
+
+    # 优先用上传的照片，没有则用摄像头拍的
+    photo = upload_photo or camera_photo
 
     if st.button("注册"):
         name_clean = name.strip()
@@ -189,7 +193,7 @@ def register_page():
             st.warning("请输入学号")
             return
         if not photo:
-            st.warning("请拍照或上传照片")
+            st.warning("请上传照片或使用摄像头拍照")
             return
         try:
             filename, data, content_type = _make_file_payload(photo)
@@ -226,14 +230,18 @@ def attend_page():
     """考勤签到页面（支持上传照片或摄像头拍照）"""
     st.header("考勤签到")
     course_id = st.number_input("课程 ID", min_value=1, step=1)
-    input_method = st.radio("选择照片方式", ["上传照片", "摄像头拍照"], horizontal=True, key="attend_input_method")
-    photo = None
-    if input_method == "上传照片":
-        photo = st.file_uploader(
-            "选择照片", type=["jpg", "png", "jpeg"], key="attend_upload"
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("**上传照片**")
+        upload_photo = st.file_uploader(
+            "选择照片", type=["jpg", "png", "jpeg"], key="attend_upload", label_visibility="collapsed"
         )
-    else:
-        photo = st.camera_input("拍照", key="attend_camera")
+    with col2:
+        st.markdown("**摄像头拍照**")
+        camera_photo = st.camera_input("拍照", key="attend_camera", label_visibility="collapsed")
+
+    photo = upload_photo or camera_photo
 
     if st.button("签到"):
         if not photo:
